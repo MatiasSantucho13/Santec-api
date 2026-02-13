@@ -1,56 +1,68 @@
 import os
 import google.generativeai as genai
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
+# --- CONFIGURACIÓN ---
 app = FastAPI()
 
+# Permisos para que tu web pueda hablar con este cerebro
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # Permite acceso desde cualquier lugar (tu web, localhost, celular)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Configuración de la API Key (La toma de Render)
 api_key = os.environ.get("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
-# --- CONFIGURACIÓN DEL MODELO ---
-# Intentamos usar el más nuevo, pero si falla, no rompemos nada todavía.
-MODELO_ELEGIDO = "gemini-1.5-flash" 
+# Configuración del Modelo
+# Usamos gemini-2.5-flash que es el que confirmamos que tenés disponible
+generation_config = {
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "top_k": 40,
+    "max_output_tokens": 1024,
+}
+
+system_instruction = """
+Sos el asistente virtual de SanTec Software. 
+Tu objetivo es atender a dueños de inmobiliarias y constructoras.
+Sos profesional, breve y vas al grano.
+Querés vender soluciones de automatización (chatbots, IA, webs).
+Si te preguntan precios, decí que depende del proyecto y pedí que contacten por WhatsApp.
+"""
+
+# Inicializamos el modelo
+model = genai.GenerativeModel(
+    model_name="gemini-2.5-flash", 
+    generation_config=generation_config,
+    system_instruction=system_instruction,
+)
+
+# --- RUTAS ---
 
 class ChatMessage(BaseModel):
     message: str
 
+@app.get("/")
+def read_root():
+    return {"status": "Santec Brain 2.5 Online 🚀"}
+
 @app.post("/chat")
 async def chat_endpoint(request: ChatMessage):
     if not api_key:
-        return {"response": "Error: Falta la API KEY en Render."}
-
+        return {"response": "Error: Falta configurar la API KEY en el servidor."}
+    
     try:
-        # Intentamos crear el modelo
-        model = genai.GenerativeModel(MODELO_ELEGIDO)
+        # Iniciamos chat sin historial (para que sea rápido y simple)
         chat = model.start_chat(history=[])
         response = chat.send_message(request.message)
         return {"response": response.text}
-
     except Exception as e:
-        # SI FALLA, HACEMOS ESTO:
-        error_msg = str(e)
-        
-        # Si es el error 404 maldito, buscamos qué modelos SÍ hay
-        if "404" in error_msg or "not found" in error_msg:
-            try:
-                lista_modelos = []
-                for m in genai.list_models():
-                    if "generateContent" in m.supported_generation_methods:
-                        lista_modelos.append(m.name)
-                
-                return {"response": f"⚠️ EL MODELO '{MODELO_ELEGIDO}' NO EXISTE PARA TU CUENTA. \n\n✅ USA UNO DE ESTOS (Copiame el nombre y lo cambiamos):\n" + "\n".join(lista_modelos)}
-            except Exception as e2:
-                return {"response": f"Error doble: {str(e2)}"}
-        
-        return {"response": f"Error del sistema: {error_msg}"}
+        return {"response": f"Error del sistema: {str(e)}"}
