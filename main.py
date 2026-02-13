@@ -1,71 +1,56 @@
 import os
 import google.generativeai as genai
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
-# --- CONFIGURACIÓN ---
 app = FastAPI()
 
-# Permisos para que tu web (y tu compu) puedan usar el bot
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://santecsoftware.com.ar", # Tu web real
-        "http://127.0.0.1:5500",         # Tu VS Code (Live Server)
-        "http://localhost:5500"          # Variación local
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configuración de la IA (Busca la clave en el sistema, NO en el código)
 api_key = os.environ.get("GEMINI_API_KEY")
-
 if api_key:
     genai.configure(api_key=api_key)
 
-# Configuración de cómo responde el modelo
-generation_config = {
-    "temperature": 0.7,
-    "top_p": 0.95,
-    "top_k": 40,
-    "max_output_tokens": 1024,
-}
-
-# Instrucciones del sistema (Tu "Empleado")
-system_instruction = """
-Sos el asistente virtual de SanTec Software. 
-Tu objetivo es atender a dueños de inmobiliarias y constructoras.
-Sos profesional, breve y vas al grano.
-Querés vender soluciones de automatización (chatbots, IA, webs).
-Si te preguntan precios, decí que depende del proyecto y pedí un contacto.
-"""
-
-model = genai.GenerativeModel(
-    model_name="gemini-pro",
-    generation_config=generation_config,
-    system_instruction=system_instruction,
-)
-
-# --- RUTAS DEL SERVIDOR ---
+# --- CONFIGURACIÓN DEL MODELO ---
+# Intentamos usar el más nuevo, pero si falla, no rompemos nada todavía.
+MODELO_ELEGIDO = "gemini-1.5-flash" 
 
 class ChatMessage(BaseModel):
     message: str
 
-@app.get("/")
-def read_root():
-    return {"status": "Santec Brain Online 🟢"}
-
 @app.post("/chat")
 async def chat_endpoint(request: ChatMessage):
     if not api_key:
-        return {"response": "Error: Falta configurar la API KEY en el servidor."}
-    
+        return {"response": "Error: Falta la API KEY en Render."}
+
     try:
+        # Intentamos crear el modelo
+        model = genai.GenerativeModel(MODELO_ELEGIDO)
         chat = model.start_chat(history=[])
         response = chat.send_message(request.message)
         return {"response": response.text}
+
     except Exception as e:
-        return {"response": f"Error del sistema: {str(e)}"}
+        # SI FALLA, HACEMOS ESTO:
+        error_msg = str(e)
+        
+        # Si es el error 404 maldito, buscamos qué modelos SÍ hay
+        if "404" in error_msg or "not found" in error_msg:
+            try:
+                lista_modelos = []
+                for m in genai.list_models():
+                    if "generateContent" in m.supported_generation_methods:
+                        lista_modelos.append(m.name)
+                
+                return {"response": f"⚠️ EL MODELO '{MODELO_ELEGIDO}' NO EXISTE PARA TU CUENTA. \n\n✅ USA UNO DE ESTOS (Copiame el nombre y lo cambiamos):\n" + "\n".join(lista_modelos)}
+            except Exception as e2:
+                return {"response": f"Error doble: {str(e2)}"}
+        
+        return {"response": f"Error del sistema: {error_msg}"}
