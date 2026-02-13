@@ -44,7 +44,7 @@ Si te preguntan precios, decí que depende del proyecto y pedí un contacto.
 """
 
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash-001",
+    model_name="gemini-pro",
     generation_config=generation_config,
     system_instruction=system_instruction,
 )
