@@ -116,20 +116,19 @@ generation_config = {
     "temperature": 0.4,
     "top_p": 0.85,
     "top_k": 40,
-    "max_output_tokens": 500,
+    "max_output_tokens": 1024,
 }
 
 # ---------------------------------------------------------------
-# CONFIGURACIÓN DEL CLASIFICADOR (thinking desactivado)
+# CONFIGURACIÓN DEL CLASIFICADOR (modelo lite: no usa "thinking" por defecto)
 # ---------------------------------------------------------------
 
 classifier_config = {
     "temperature": 0.0,
     "top_p": 0.1,
     "top_k": 1,
-    "max_output_tokens": 10,
+    "max_output_tokens": 16,
     "candidate_count": 1,
-    "thinking_config": {"thinking_budget": 0},
 }
 
 # ---------------------------------------------------------------
@@ -324,7 +323,7 @@ model = genai.GenerativeModel(
 )
 
 classifier_model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash",
+    model_name="gemini-2.5-flash-lite",
     generation_config=classifier_config,
     system_instruction=classifier_instruction,
 )
